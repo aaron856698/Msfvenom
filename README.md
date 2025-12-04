@@ -62,3 +62,5 @@ Esta herramienta es para fines educativos, investigación y pruebas controladas.
 - Autor: Aaron G
 - Arte ASCII opcional desde `ascii-art (1).txt`
 
+![alt text](image.png)
+![alt text](image-1.png)
